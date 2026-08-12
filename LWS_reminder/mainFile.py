@@ -1,19 +1,16 @@
-
 import os
 import sys
 import traceback
 from datetime import datetime
 import pandas as pd
-import tkinter as tk
-from tkinter import ttk, messagebox
-from PIL import Image, ImageTk
+import customtkinter as ctk
+from PIL import Image
 
-
-FILE_NAME = "plan.xlsx"  # change if your file has different name or path
+FILE_NAME = "plan.xlsx"
 DATE_COL_CANDIDATES = ["Date", "date"]
 TASK_COL_CANDIDATES = ["Task", "task", "Description", "description"]
-STATUS_COL = "Status"     # column we'll write ("Done" / "Pending")
-DATE_DISPLAY_FORMAT = "%d-%m-%Y"  # Excel date shown like "12-08-2025"
+STATUS_COL = "Status"
+DATE_DISPLAY_FORMAT = "%d-%m-%Y"
 LOGO_FILE = "Logo.png"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 FILE_PATH = os.path.join(SCRIPT_DIR, FILE_NAME)
@@ -26,13 +23,10 @@ def err(msg):
 def load_dataframe(path):
     if not os.path.exists(path):
         raise FileNotFoundError(f"{path} not found.")
-    # read with openpyxl engine (need openpyxl installed)
-    df = pd.read_excel(path, engine="openpyxl")
-    return df
+    return pd.read_excel(path, engine="openpyxl")
 
 
 def find_column(df, candidates):
-    # Return first matching column name in df.columns or None
     cols = list(df.columns)
     for c in candidates:
         for col in cols:
@@ -44,28 +38,22 @@ def find_column(df, candidates):
 def ensure_status_column(df):
     if STATUS_COL not in df.columns:
         df[STATUS_COL] = "Pending"
-    # normalize values
-    df[STATUS_COL] = df[STATUS_COL].fillna("Pending").apply(lambda v: "Done" if str(v).strip().lower() in ["done", "true", "1", "yes"] else "Pending")
+    df[STATUS_COL] = df[STATUS_COL].fillna("Pending").apply(
+        lambda v: "Done" if str(v).strip().lower() in ["done", "true", "1", "yes"] else "Pending"
+    )
     return df
 
 
 def parse_dates(df, date_col):
-    # Try to parse the date column into a date object; keep original column untouched
-    parsed = pd.to_datetime(df[date_col], dayfirst=True, errors="coerce").dt.date
-    return parsed
+    return pd.to_datetime(df[date_col], dayfirst=True, errors="coerce").dt.date
 
 
 def safe_save(df, path):
-    """
-    Try to save to path. If file is locked by Excel (PermissionError / OSError),
-    save to a timestamped fallback file and notify user.
-    """
     try:
         df.to_excel(path, index=False, engine="openpyxl")
         return path
     except Exception as e:
         err(f"Failed to write to {path}: {e}")
-        # fallback
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         fallback = os.path.splitext(path)[0] + f"_saved_{ts}.xlsx"
         try:
@@ -76,185 +64,305 @@ def safe_save(df, path):
             raise e2
 
 
+def show_alert(parent, title, message, alert_type="info"):
+    """Displays a modern native overlay dialog directly over the UI."""
+    # Fixed: Replaced 'rgba(...)' with a solid hex tint color supported by Tkinter
+    overlay = ctk.CTkFrame(parent, fg_color="#CBD5E1", corner_radius=0)
+    overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+
+    border_color = "#EF4444" if alert_type == "error" else "#F59E0B" if alert_type == "warning" else "#2563EB"
+
+    card = ctk.CTkFrame(
+        overlay,
+        fg_color="#FFFFFF",
+        corner_radius=16,
+        border_width=2,
+        border_color=border_color,
+        width=380
+    )
+    card.place(relx=0.5, rely=0.5, anchor="center")
+
+    ctk.CTkLabel(
+        card,
+        text=title,
+        font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold"),
+        text_color="#1E293B"
+    ).pack(padx=20, pady=(16, 6), anchor="w")
+
+    ctk.CTkLabel(
+        card,
+        text=message,
+        font=ctk.CTkFont(family="Segoe UI", size=12),
+        text_color="#64748B",
+        wraplength=320,
+        justify="left"
+    ).pack(padx=20, pady=(0, 16), anchor="w")
+
+    ctk.CTkButton(
+        card,
+        text="OK",
+        fg_color="#1E293B",
+        hover_color="#334155",
+        text_color="#FFFFFF",
+        font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+        corner_radius=8,
+        height=32,
+        width=80,
+        command=overlay.destroy
+    ).pack(padx=20, pady=(0, 16), anchor="e")
+
+
 def build_and_show_ui(df_all, tasks_today, date_col, task_col):
-    # Root window
-    root = tk.Tk()
+    ctk.set_appearance_mode("Light")
+    ctk.set_default_color_theme("blue")
+
+    root = ctk.CTk()
     root.title("Today's Tasks")
-    root.configure(bg="#f4f6f8")
-    root.attributes("-topmost", True)
-    root.geometry("520x520")
+    root.geometry("540x600")
     root.resizable(True, True)
+    root.configure(fg_color="#F4F6F9")
+    root.attributes("-topmost", True)
 
-    # --- Header Frame ---
-    header_frame = tk.Frame(root, bg="white", bd=0, highlightthickness=0)
-    header_frame.pack(pady=15, padx=15, fill="x")
-    header_frame.configure(highlightbackground="#ddd", highlightcolor="#ddd")
+    # --- Header Banner ---
+    header_frame = ctk.CTkFrame(root, corner_radius=16, fg_color="#FFFFFF", border_width=1, border_color="#E2E8F0")
+    header_frame.pack(pady=(16, 8), padx=16, fill="x")
 
-    # Rounded effect simulation using padding
-    header_frame.grid_columnconfigure(1, weight=1)
+    header_content = ctk.CTkFrame(header_frame, fg_color="transparent")
+    header_content.pack(fill="x", padx=16, pady=12)
 
+    col_idx = 0
     if os.path.exists(LOGO_FILE):
-        img = Image.open(LOGO_FILE)
-        img = img.resize((60, 60), Image.LANCZOS)
-        logo_img = ImageTk.PhotoImage(img)
-        logo_label = tk.Label(header_frame, image=logo_img, bg="white")
-        logo_label.image = logo_img
-        logo_label.grid(row=0, column=0, padx=(5, 15), pady=10, sticky="w")
+        try:
+            logo_img = ctk.CTkImage(
+                light_image=Image.open(LOGO_FILE),
+                dark_image=Image.open(LOGO_FILE),
+                size=(48, 48)
+            )
+            logo_label = ctk.CTkLabel(header_content, image=logo_img, text="")
+            logo_label.grid(row=0, column=0, rowspan=2, padx=(0, 12), sticky="w")
+            col_idx = 1
+        except Exception as e:
+            err(f"Could not load logo: {e}")
 
-    title_label = tk.Label(
-        header_frame,
+    title_label = ctk.CTkLabel(
+        header_content,
         text="LEARN WITH PSUDO",
-        font=("Segoe UI", 22, "bold"),
-        fg="#2c3e50",
-        bg="white"
+        font=ctk.CTkFont(family="Segoe UI", size=20, weight="bold"),
+        text_color="#1E293B"
     )
-    title_label.grid(row=0, column=1, sticky="w")
+    title_label.grid(row=0, column=col_idx, sticky="w")
 
-    # --- Subheader ---
-    header = tk.Label(
+    date_str = datetime.now().strftime(DATE_DISPLAY_FORMAT)
+    subheader = ctk.CTkLabel(
+        header_content,
+        text=f"Tasks for {date_str}",
+        font=ctk.CTkFont(family="Segoe UI", size=12, weight="normal"),
+        text_color="#64748B"
+    )
+    subheader.grid(row=1, column=col_idx, sticky="w")
+
+    # --- Task List Section ---
+    task_container = ctk.CTkScrollableFrame(
         root,
-        text=f"Tasks for {datetime.now().strftime(DATE_DISPLAY_FORMAT)}",
-        font=("Segoe UI", 14, "bold"),
-        fg="#34495e",
-        bg="#f4f6f8"
+        corner_radius=16,
+        fg_color="#FFFFFF",
+        border_width=1,
+        border_color="#E2E8F0",
+        scrollbar_button_color="#CBD5E1",
+        scrollbar_button_hover_color="#94A3B8"
     )
-    header.pack(padx=15, pady=(5, 10), anchor="w")
+    task_container.pack(fill="both", expand=True, padx=16, pady=8)
 
-    # --- Scrollable Frame for Tasks ---
-    container = tk.Frame(root, bg="#f4f6f8")
-    container.pack(fill="both", expand=True, padx=15, pady=10)
-
-    canvas = tk.Canvas(container, bg="white", highlightthickness=0)
-    scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
-    scroll_frame = tk.Frame(canvas, bg="white")
-
-    scroll_frame.bind(
-        "<Configure>",
-        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-    )
-
-    canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
-    canvas.configure(yscrollcommand=scrollbar.set)
-
-    canvas.pack(side="left", fill="both", expand=True)
-    scrollbar.pack(side="right", fill="y")
-
-    # dictionary to hold tk.BooleanVar for each row index
     var_map = {}
+    cb_map = {}
+    label_map = {}
+
+    def update_item_visuals(idx, is_done):
+        if idx in label_map:
+            lbl = label_map[idx]
+            lbl.configure(text_color="#94A3B8" if is_done else "#1E293B")
 
     def toggle_and_save(index, var):
-        # Update df_all and save immediately
+        is_done = var.get()
+        update_item_visuals(index, is_done)
         try:
-            df_all.at[index, STATUS_COL] = "Done" if var.get() else "Pending"
+            df_all.at[index, STATUS_COL] = "Done" if is_done else "Pending"
             saved_path = safe_save(df_all, FILE_PATH)
-            # If saved to fallback, notify user
             if os.path.abspath(saved_path) != os.path.abspath(FILE_PATH):
-                messagebox.showwarning("Save warning", f"Could not overwrite {FILE_PATH}. Saved to {saved_path} instead.\nClose Excel if it's open to allow saving to the original file.")
+                show_alert(
+                    root,
+                    "Save Warning",
+                    f"Could not overwrite {FILE_PATH}. Saved to {saved_path} instead.",
+                    alert_type="warning"
+                )
         except Exception as e:
-            messagebox.showerror("Save error", f"Error saving status: {e}")
+            show_alert(root, "Save Error", f"Error saving status: {e}", alert_type="error")
 
-    # Create a row per task
+    # Render Task Cards
     for idx, row in tasks_today.iterrows():
         task_text = str(row.get(task_col, "(no task)"))
         time_text = str(row.get("Time", ""))
         status_val = row.get(STATUS_COL, "Pending")
-        checked = True if str(status_val).strip().lower() in ["done", "true", "1", "yes"] else False
+        checked = str(status_val).strip().lower() in ["done", "true", "1", "yes"]
 
-        var = tk.BooleanVar(value=checked)
-        cb_text = f"{time_text + ' - ' if time_text and time_text != 'nan' else ''}{task_text}"
-        cb = ttk.Checkbutton(scroll_frame, text=cb_text, variable=var,
-                             command=lambda i=idx, v=var: toggle_and_save(i, v))
-        cb.pack(anchor="w", pady=4, padx=4)
+        var = ctk.BooleanVar(value=checked)
+
+        card = ctk.CTkFrame(
+            task_container,
+            corner_radius=10,
+            fg_color="#F8FAFC",
+            border_width=1,
+            border_color="#F1F5F9"
+        )
+        card.pack(fill="x", pady=4, padx=4)
+
+        cb = ctk.CTkCheckBox(
+            card,
+            text="",
+            variable=var,
+            width=24,
+            height=24,
+            checkbox_width=20,
+            checkbox_height=20,
+            corner_radius=6,
+            border_width=2,
+            fg_color="#2563EB",
+            hover_color="#1D4ED8",
+            border_color="#94A3B8",
+            command=lambda i=idx, v=var: toggle_and_save(i, v)
+        )
+        cb.pack(side="left", padx=(12, 6), pady=10)
+
+        if time_text and time_text.lower() != "nan":
+            time_badge = ctk.CTkFrame(card, corner_radius=6, fg_color="#DBEAFE")
+            time_badge.pack(side="left", padx=(0, 8), pady=10)
+
+            time_lbl = ctk.CTkLabel(
+                time_badge,
+                text=time_text,
+                font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                text_color="#1E40AF"
+            )
+            time_lbl.pack(padx=6, pady=2)
+
+        task_lbl = ctk.CTkLabel(
+            card,
+            text=task_text,
+            font=ctk.CTkFont(family="Segoe UI", size=13),
+            text_color="#94A3B8" if checked else "#1E293B",
+            anchor="w",
+            justify="left",
+            wraplength=340
+        )
+        task_lbl.pack(side="left", fill="x", expand=True, padx=(0, 12), pady=10)
+
         var_map[idx] = var
+        cb_map[idx] = cb
+        label_map[idx] = task_lbl
 
-    # Buttons
-    btn_frame = ttk.Frame(root)
-    btn_frame.pack(fill="x", padx=10, pady=10)
+    # --- Footer Action Bar ---
+    footer_frame = ctk.CTkFrame(root, fg_color="transparent")
+    footer_frame.pack(fill="x", padx=16, pady=(8, 16))
 
     def mark_all_done():
         for i, v in var_map.items():
             if not v.get():
                 v.set(True)
+                update_item_visuals(i, True)
                 df_all.at[i, STATUS_COL] = "Done"
         try:
-            saved = safe_save(df_all, FILE_PATH)
-            if os.path.abspath(saved) != os.path.abspath(FILE_PATH):
-                messagebox.showwarning("Save warning", f"Saved to {saved} (couldn't overwrite original file).")
+            safe_save(df_all, FILE_PATH)
         except Exception as e:
-            messagebox.showerror("Save error", f"Error saving: {e}")
+            show_alert(root, "Save Error", f"Error saving: {e}", alert_type="error")
 
     def mark_all_pending():
         for i, v in var_map.items():
             if v.get():
                 v.set(False)
+                update_item_visuals(i, False)
                 df_all.at[i, STATUS_COL] = "Pending"
         try:
-            saved = safe_save(df_all, FILE_PATH)
-            if os.path.abspath(saved) != os.path.abspath(FILE_PATH):
-                messagebox.showwarning("Save warning", f"Saved to {saved} (couldn't overwrite original file).")
+            safe_save(df_all, FILE_PATH)
         except Exception as e:
-            messagebox.showerror("Save error", f"Error saving: {e}")
+            show_alert(root, "Save Error", f"Error saving: {e}", alert_type="error")
 
-    ttk.Button(btn_frame, text="Mark all Done", command=mark_all_done).pack(side="left", padx=(0, 6))
-    ttk.Button(btn_frame, text="Mark all Pending", command=mark_all_pending).pack(side="left", padx=(0, 6))
-    ttk.Button(btn_frame, text="Close", command=root.destroy).pack(side="right")
+    btn_done = ctk.CTkButton(
+        footer_frame,
+        text="Mark All Done",
+        fg_color="#10B981",
+        hover_color="#059669",
+        text_color="#FFFFFF",
+        font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+        corner_radius=8,
+        height=36,
+        command=mark_all_done
+    )
+    btn_done.pack(side="left", padx=(0, 8))
 
-    # make sure window stays on top at start
+    btn_pending = ctk.CTkButton(
+        footer_frame,
+        text="Mark All Pending",
+        fg_color="#F3F4F6",
+        hover_color="#E5E7EB",
+        text_color="#374151",
+        font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+        corner_radius=8,
+        height=36,
+        command=mark_all_pending
+    )
+    btn_pending.pack(side="left")
+
+    btn_close = ctk.CTkButton(
+        footer_frame,
+        text="Close",
+        fg_color="#E2E8F0",
+        hover_color="#CBD5E1",
+        text_color="#334155",
+        font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+        corner_radius=8,
+        height=36,
+        width=80,
+        command=root.destroy
+    )
+    btn_close.pack(side="right")
+
     root.lift()
-    root.after(1000, lambda: root.attributes("-topmost", False))  # allow user to move it after first focus
+    root.after(1000, lambda: root.attributes("-topmost", False))
     root.mainloop()
 
 
 def main():
     try:
-        # load
         df = load_dataframe(FILE_PATH)
 
-        # find columns
         date_col = find_column(df, DATE_COL_CANDIDATES)
         task_col = find_column(df, TASK_COL_CANDIDATES)
 
         if date_col is None or task_col is None:
-            messagebox.showerror("Column error", f"Required columns not found. Need a Date column and a Task column.\nFound columns: {list(df.columns)}")
+            err(f"Required columns not found. Need Date and Task columns. Found: {list(df.columns)}")
             return
 
-        # ensure status column
         df = ensure_status_column(df)
-
-        # parse date into date objects
-        parsed_dates = parse_dates(df, date_col)
-        df["_parsed_date"] = parsed_dates  # helper column
+        df["_parsed_date"] = parse_dates(df, date_col)
 
         today = datetime.now().date()
         tasks_today = df[df["_parsed_date"] == today]
 
         if tasks_today.empty:
-            # nothing to show; exit quietly
             return
 
-        # show UI and allow updating statuses
         build_and_show_ui(df, tasks_today, date_col, task_col)
 
     except Exception as e:
-        # show a user-friendly error dialog and also print traceback
         traceback.print_exc()
-        try:
-            messagebox.showerror("Error", f"An unexpected error occurred:\n{e}")
-        except Exception:
-            err(f"Fatal error: {e}")
+        err(f"Fatal error: {e}")
 
 
 if __name__ == "__main__":
-    # quick check for required libs
     try:
         import openpyxl  # noqa: F401
     except Exception:
-        message = "Missing dependency: openpyxl. Install it with:\n\npip install openpyxl"
-        print(message, file=sys.stderr)
-        try:
-            messagebox.showerror("Missing dependency", message)
-        except Exception:
-            pass
+        print("Missing dependency: openpyxl. Install it with: pip install openpyxl", file=sys.stderr)
         sys.exit(1)
 
     main()
