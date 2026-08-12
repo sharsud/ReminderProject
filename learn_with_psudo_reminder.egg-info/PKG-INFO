@@ -1,5 +1,0 @@
-Metadata-Version: 2.1
-Name: learn_with_psudo_reminder
-Version: 1.0.0
-Requires-Dist: Pillow
-Requires-Dist: Pandas

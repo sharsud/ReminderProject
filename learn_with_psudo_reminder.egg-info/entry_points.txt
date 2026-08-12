@@ -1,2 +1,0 @@
-[console_scripts]
-learnpsudo-reminder = learn_with_psudo_reminder.main:run_app
