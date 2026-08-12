@@ -1,0 +1,9 @@
+setup.py
+LWS_reminder/__init__.py
+LWS_reminder/mainFile.py
+learn_with_psudo_reminder.egg-info/PKG-INFO
+learn_with_psudo_reminder.egg-info/SOURCES.txt
+learn_with_psudo_reminder.egg-info/dependency_links.txt
+learn_with_psudo_reminder.egg-info/entry_points.txt
+learn_with_psudo_reminder.egg-info/requires.txt
+learn_with_psudo_reminder.egg-info/top_level.txt
