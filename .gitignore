@@ -2,3 +2,5 @@
 /.idea
 /learn_with_psudo_reminder.egg-info
 /build
+LWS_reminder/test.py
+LWS_reminder/config.py
