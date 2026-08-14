@@ -21,12 +21,14 @@ DEPENDENCIES:
     - openpyxl (Excel engine)
     - requests (Direct Jira REST API fetching)
     - Pillow / PIL (Logo image handling)
+
+links/URLs:
+    -https://id.atlassian.com/manage-profile/security/api-tokens
 ===============================================================================
 """
 
 import os
 import sys
-import time
 import traceback
 from datetime import datetime
 import pandas as pd
